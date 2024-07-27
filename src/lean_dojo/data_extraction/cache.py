@@ -13,7 +13,6 @@ from typing import Optional, Tuple, Generator
 from ..utils import (
     execute,
     url_exists,
-    get_repo_info,
     report_critical_failure,
 )
 from ..constants import (
@@ -36,7 +35,8 @@ def _split_git_url(url: str) -> Tuple[str, str]:
 
 def _format_dirname(url: str, commit: str) -> str:
     user_name, repo_name = _split_git_url(url)
-    return f"{user_name}-{repo_name}-{commit}"
+    # return f"{user_name}-{repo_name}-{commit}"
+    return f"{repo_name}-{commit}"
 
 
 _CACHE_CORRPUTION_MSG = "The cache may have been corrputed!"
@@ -59,16 +59,16 @@ class Cache:
         lock_path = self.cache_dir.with_suffix(".lock")
         object.__setattr__(self, "lock", FileLock(lock_path))
 
-    def get(self, url: str, commit: str, prefix: str = "") -> Optional[Path]:
+    def get(self, rel_cache_dir:Path) -> Optional[Path]:
         """Get the path of a traced repo with URL ``url`` and commit hash ``commit``. Return None if no such repo can be found."""
-        _, repo_name = _split_git_url(url)
-        dirname = _format_dirname(url, commit)
-        dirpath = self.cache_dir / prefix / dirname
+        dirname = rel_cache_dir.parent
+        dirpath = self.cache_dir / dirname
+        cache_path = self.cache_dir / rel_cache_dir
 
         with self.lock:
             if dirpath.exists():
-                assert (dirpath / repo_name).exists()
-                return dirpath / repo_name
+                assert cache_path.exists()
+                return cache_path
 
             elif not DISABLE_REMOTE_CACHE:
                 url = os.path.join(REMOTE_CACHE_URL, f"{dirname}.tar.gz")
@@ -83,9 +83,9 @@ class Cache:
                     with tarfile.open(f"{dirpath}.tar.gz") as tar:
                         tar.extractall(self.cache_dir)
                     os.remove(f"{dirpath}.tar.gz")
-                    assert (dirpath / repo_name).exists()
+                    assert (cache_path).exists()
 
-                return dirpath / repo_name
+                return cache_path
 
             else:
                 return None

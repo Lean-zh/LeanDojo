@@ -3,7 +3,7 @@ from lean_dojo import LeanGitRepo
 from lean_dojo.constants import LEAN4_URL
 from git import Repo
 from github.Repository import Repository
-from lean_dojo.utils import working_directory
+from lean_dojo.utils import working_directory, url_exists
 from lean_dojo.data_extraction.lean import (
     _to_commit_hash,
     repo_type_of_url,
@@ -13,9 +13,11 @@ from lean_dojo.data_extraction.lean import (
     GITHUB,
 )
 
-
 def test_url_to_repo(lean4_example_url, remote_example_url):
     repo_name = "lean4-example"
+
+    assert url_exists(lean4_example_url)
+    assert url_exists(remote_example_url)
 
     # 1. github
     ## test get_latest_commit
@@ -95,7 +97,6 @@ def test_to_commit_hash(lean4_example_url, remote_example_url, example_commit_ha
         )
         # no tags in the remote repo
 
-
 def test_git_lean_repo(lean4_example_url, example_commit_hash):
     repo = LeanGitRepo(lean4_example_url, example_commit_hash)
     assert repo.url == lean4_example_url
@@ -104,4 +105,4 @@ def test_git_lean_repo(lean4_example_url, example_commit_hash):
     assert repo.name == "lean4-example"
     assert repo.commit_url == f"{lean4_example_url}/tree/{example_commit_hash}"
     # test cache directory
-    assert repo.format_dirname == f"yangky11-lean4-example-{example_commit_hash}"
+    assert str(repo.format_dirname) == f"lean4-example-{example_commit_hash}"

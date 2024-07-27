@@ -6,7 +6,7 @@ from lean_dojo.data_extraction.cache import cache
 def test_example_trace(lean4_example_repo):
     trace_repo = trace(lean4_example_repo)
     repo = trace_repo.repo
-    path = cache.get(repo.url, repo.commit)
+    path = cache.get(lean4_example_repo.format_dirname / repo.name)
     assert path is not None
 
 

@@ -5,7 +5,7 @@ import re
 import os
 import ray
 import time
-import urllib
+# import urllib, urllib.request, urllib.error
 import typing
 import hashlib
 import tempfile
@@ -16,6 +16,7 @@ from functools import cache
 from contextlib import contextmanager
 from ray.util.actor_pool import ActorPool
 from typing import Tuple, Union, List, Generator, Optional
+import requests
 
 from .constants import NUM_WORKERS, TMP_DIR, LEAN4_PACKAGES_DIR, LEAN4_BUILD_DIR
 
@@ -144,32 +145,6 @@ def camel_case(s: str) -> str:
     return _CAMEL_CASE_REGEX.sub(" ", s).title().replace(" ", "")
 
 
-@cache
-def get_repo_info(path: Path) -> Tuple[str, str]:
-    """Get the URL and commit hash of the Git repo at ``path``.
-
-    Args:
-        path (Path): Path to the Git repo.
-
-    Returns:
-        Tuple[str, str]: URL and (most recent) hash commit
-    """
-    with working_directory(path):
-        # Get the URL.
-        url_msg, _ = execute(f"git remote get-url origin", capture_output=True)
-        url = url_msg.strip()
-        # Get the commit.
-        commit_msg, _ = execute(f"git log -n 1", capture_output=True)
-        m = re.search(r"(?<=^commit )[a-z0-9]+", commit_msg)
-        assert m is not None
-        commit = m.group()
-
-    if url.startswith("git@"):
-        assert url.endswith(".git")
-        url = url[: -len(".git")].replace(":", "/").replace("git@", "https://")
-
-    return url, commit
-
 
 def is_optional_type(tp: type) -> bool:
     """Test if ``tp`` is Optional[X]."""
@@ -192,32 +167,37 @@ def remove_optional_type(tp: type) -> type:
 
 @cache
 def read_url(url: str, num_retries: int = 2) -> str:
-    """Read the contents of the URL ``url``. Retry if failed"""
+    """Read the contents of the URL `url`. Retry if failed."""
     backoff = 1
-    while True:
+    gh_token = os.getenv("GITHUB_ACCESS_TOKEN")
+    headers = {}
+    if gh_token is not None:
+        headers['Authorization'] = f'token {gh_token}'
+    while num_retries >= 0:
         try:
-            with urllib.request.urlopen(url) as f:
-                return f.read().decode()
-        except Exception as ex:
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            return response.text
+        except requests.RequestException as ex:
             if num_retries <= 0:
                 raise ex
             num_retries -= 1
-            logger.debug(f"Request to {url} failed. Retrying...")
+            logger.debug(f"Request to {url} failed. Retrying... {num_retries} retries left")
             time.sleep(backoff)
             backoff *= 2
 
 
 @cache
 def url_exists(url: str) -> bool:
-    """Return True if the URL ``url`` exists, using the GITHUB_ACCESS_TOKEN for authentication if provided."""
+    """Return True if the URL `url` exists, using the GITHUB_ACCESS_TOKEN for authentication if provided."""
     try:
-        request = urllib.request.Request(url)
+        headers = {}
         gh_token = os.getenv("GITHUB_ACCESS_TOKEN")
         if gh_token is not None:
-            request.add_header("Authorization", f"token {gh_token}")
-        with urllib.request.urlopen(request) as _:
-            return True
-    except urllib.error.HTTPError:
+            headers["Authorization"] = f"token {gh_token}"
+        response = requests.head(url, headers=headers)
+        return response.status_code == 200
+    except requests.RequestException:
         return False
 
 
